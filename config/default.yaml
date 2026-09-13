@@ -1,0 +1,29 @@
+scope:
+  allowed_domains: []
+  subdomain_scope: true
+  scope_file: null
+
+crawler:
+  max_depth: 3
+  max_urls: 1000
+  max_requests: 5000
+
+scanner:
+  reflected: true
+  stored: true
+  dom: true
+  comprehensive_payloads: true
+
+performance:
+  threads: 10
+  delay: 0.2
+  timeout: 15
+
+browser:
+  enabled: true
+  headless: true
+
+reporting:
+  html: true
+  json: true
+  txt: true
