@@ -19,7 +19,7 @@ XSSAM is a professional-grade security tool designed for authorized bug-bounty r
 
 ### Setup
 ```bash
-git clone https://github.com/your-username/XSSAM.git
+git clone https://github.com/clipsncore911/XSSAM.git
 cd XSSAM
 pip install -r requirements.txt
 playwright install chromium
