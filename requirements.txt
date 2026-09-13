@@ -1,0 +1,10 @@
+httpx
+playwright
+pydantic
+rich
+jinja2
+beautifulsoup4
+pyyaml
+pytest
+pytest-asyncio
+flask
