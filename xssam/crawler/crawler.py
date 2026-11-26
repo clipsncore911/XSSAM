@@ -1,115 +1,152 @@
+from __future__ import annotations
+
 import asyncio
-from urllib.parse import urljoin, urlparse
+import inspect
+from collections.abc import Awaitable, Callable
+from urllib.parse import urljoin
+
+import httpx
 from bs4 import BeautifulSoup
-from typing import Set, List, Optional, Callable, Awaitable
-from xssam.utils.http import AsyncHttpClient
+
+from xssam.config import XSSAMSettings, load_config
 from xssam.crawler.scope import ScopeValidator
-from xssam.config import settings
+from xssam.crawler.url_normalizer import normalize_url
+from xssam.logging import ScanLogger
+from xssam.utils.http import AsyncHttpClient
+
+PageCallback = Callable[[str, httpx.Response | None], Awaitable[None] | None]
+LegacyCallback = Callable[[str], Awaitable[None] | None]
+
+
+def is_html_response(response: httpx.Response | None) -> bool:
+    if response is None:
+        return False
+    content_type = response.headers.get("content-type", "").lower()
+    if "html" in content_type:
+        return True
+    head = response.text[:256].lstrip().lower()
+    return head.startswith(("<!doctype html", "<html"))
+
 
 class AsyncCrawler:
-    def __init__(self, start_url: str, client: AsyncHttpClient, validator: ScopeValidator, on_url_discovered: Optional[Callable[[str], Awaitable[None]]] = None):
-        self.start_url = start_url
+    """A bounded, same-scope crawler using a queue and a fixed worker pool."""
+
+    def __init__(
+        self,
+        start_url: str,
+        client: AsyncHttpClient,
+        validator: ScopeValidator,
+        config: XSSAMSettings | None = None,
+        *,
+        on_page: PageCallback | None = None,
+        on_url_discovered: LegacyCallback | None = None,
+        logger: ScanLogger | None = None,
+    ) -> None:
+        canonical = normalize_url(start_url)
+        if not canonical:
+            raise ValueError(f"Invalid HTTP(S) start URL: {start_url}")
+
+        self.start_url = canonical
         self.client = client
         self.validator = validator
-        self.on_url_discovered = on_url_discovered
-        self.visited: Set[str] = set()
-        self.discovered_urls: Set[str] = set()
-        self.queue: asyncio.Queue = asyncio.Queue()
-        self.max_depth = settings.crawler.max_depth
-        self.max_urls = settings.crawler.max_urls
+        self.config = config or load_config(cwd_fallback=False)
+        self.logger = logger or ScanLogger(quiet=True)
+        self.max_depth = self.config.crawler.max_depth
+        self.max_urls = self.config.crawler.max_urls
+        self.visited: set[str] = set()
+        self.discovered_urls: set[str] = {canonical}
+        self.queue: asyncio.Queue[tuple[str, int] | None] = asyncio.Queue()
+        self._workers: list[asyncio.Task[None]] = []
 
-    async def crawl(self):
-        # Seed the queue
-        await self.queue.put((self.start_url, 0))
-        self.discovered_urls.add(self.start_url)
+        if on_page is None and on_url_discovered is not None:
+            legacy_callback = on_url_discovered
 
-        # Create a pool of workers
-        num_workers = settings.performance.threads
-        workers = [asyncio.create_task(self._worker()) for _ in range(num_workers)]
+            async def wrapped(url: str, _response: httpx.Response | None) -> None:
+                result = legacy_callback(url)
+                if inspect.isawaitable(result):
+                    await result
 
-        # Wait until all discovered URLs are processed
-        # We use a custom logic because we don't want to wait forever if the site is huge
-        # and we want to respect max_urls.
+            on_page = wrapped
+        self.on_page = on_page
 
-        # Since asyncio.Queue doesn't have a 'join()' that works across workers
-        # without task_done(), we'll use a simpler approach:
-        # Process until the queue is empty AND no workers are actively processing.
+    async def crawl(self) -> list[str]:
+        self.queue.put_nowait((self.start_url, 0))
+        worker_count = min(self.config.performance.threads, self.max_urls)
+        self._workers = [asyncio.create_task(self._worker()) for _ in range(worker_count)]
 
-        # Actually, the most standard way:
-        # 1. Add start URL.
-        # 2. Workers take from queue, process, add new URLs to queue.
-        # 3. When queue is empty and all workers are idle -> Done.
+        try:
+            # queue.join() is race-free: unfinished_tasks is incremented when an
+            # item is enqueued, before a worker can mark it done.
+            await self.queue.join()
+        finally:
+            for _ in self._workers:
+                self.queue.put_nowait(None)
+            await asyncio.gather(*self._workers, return_exceptions=True)
+            self._workers.clear()
 
-        # To avoid hanging, we'll use a timeout or the max_urls limit.
+        return sorted(self.discovered_urls)
 
-        # Let's use a shared counter for active tasks.
-        self._active_tasks = 0
-        self._condition = asyncio.Condition()
-
-        # We'll run the workers and wait for the completion condition.
-        # To simplify for this project, I'll use a loop that checks for idle state.
-
+    async def _worker(self) -> None:
         while True:
-            if self.queue.empty() and self._active_tasks == 0:
-                break
-            if len(self.visited) >= self.max_urls:
-                break
-            await asyncio.sleep(0.1)
-
-        # Cancel workers when finished
-        for w in workers:
-            w.cancel()
-
-        return self.discovered_urls
-
-    async def _worker(self):
-        while True:
+            item = await self.queue.get()
             try:
-                url, depth = await self.queue.get()
-
-                async with self._condition:
-                    self._active_tasks += 1
-
-                try:
-                    if url not in self.visited and depth <= self.max_depth:
-                        await self._process_url(url, depth)
-                finally:
-                    async with self._condition:
-                        self._active_tasks -= 1
-                    self.queue.task_done()
+                if item is None:
+                    return
+                url, depth = item
+                await self._process_url(url, depth)
             except asyncio.CancelledError:
-                break
-            except Exception:
-                continue
+                raise
+            except Exception as exc:
+                self.logger.debug(f"Crawler worker error: {exc}")
+            finally:
+                self.queue.task_done()
 
-    async def _process_url(self, url: str, depth: int):
-        self.visited.add(url)
+    async def _process_url(self, url: str, depth: int) -> None:
+        canonical = normalize_url(url)
+        if (
+            not canonical
+            or canonical in self.visited
+            or depth > self.max_depth
+            or len(self.visited) >= self.max_urls
+        ):
+            return
+        self.visited.add(canonical)
 
-        # Trigger the attack pipeline immediately
-        if self.on_url_discovered:
-            await self.on_url_discovered(url)
+        response = await self.client.request("GET", canonical)
+        if self.on_page:
+            try:
+                result = self.on_page(canonical, response)
+                if inspect.isawaitable(result):
+                    await result
+            except Exception as exc:
+                self.logger.debug(f"Page callback failed for {canonical}: {exc}")
 
-        response = await self.client.request("GET", url)
-        if not response or "text/html" not in response.headers.get("Content-Type", ""):
+        if not is_html_response(response):
             return
 
+        assert response is not None
         soup = BeautifulSoup(response.text, "html.parser")
+        for absolute_url in self._extract_links(soup, canonical):
+            self._enqueue(absolute_url, depth + 1)
 
-        # Discovery: Links
-        for link in soup.find_all("a", href=True):
-            abs_url = urljoin(url, link["href"])
-            if self._is_valid_url(abs_url) and abs_url not in self.visited:
-                self.discovered_urls.add(abs_url)
-                await self.queue.put((abs_url, depth + 1))
+    def _extract_links(self, soup: BeautifulSoup, base_url: str) -> list[str]:
+        links: list[str] = []
+        for tag in soup.find_all(["a", "area"], href=True):
+            links.append(urljoin(base_url, str(tag["href"])))
+        for form in soup.find_all("form"):
+            action = form.get("action") or ""
+            links.append(urljoin(base_url, str(action)))
+        return links
 
-        # Discovery: Forms
-        for form in soup.find_all("form", action=True):
-            abs_url = urljoin(url, form["action"])
-            if self._is_valid_url(abs_url) and abs_url not in self.visited:
-                self.discovered_urls.add(abs_url)
-                await self.queue.put((abs_url, depth + 1))
-
-    def _is_valid_url(self, url: str) -> bool:
-        if not url.startswith("http"):
-            return False
-        return self.validator.is_in_scope(url)
+    def _enqueue(self, url: str, depth: int) -> None:
+        if depth > self.max_depth or len(self.discovered_urls) >= self.max_urls:
+            return
+        canonical = normalize_url(url)
+        if (
+            not canonical
+            or canonical in self.discovered_urls
+            or not self.validator.is_in_scope(canonical)
+        ):
+            return
+        self.discovered_urls.add(canonical)
+        self.queue.put_nowait((canonical, depth))

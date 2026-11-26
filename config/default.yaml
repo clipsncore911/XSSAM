@@ -1,27 +1,31 @@
+# Edit this file, copy it, and pass the copy with --config for custom scans.
 scope:
   allowed_domains: []
-  subdomain_scope: true
+  subdomain_scope: false
   scope_file: null
 
 crawler:
-  max_depth: 3
-  max_urls: 1000
-  max_requests: 5000
+  max_depth: 2
+  max_urls: 100
+  max_requests: 500
 
 scanner:
   reflected: true
-  stored: true
-  dom: true
+  stored: false
+  dom: false
   comprehensive_payloads: true
+  max_payloads_per_parameter: 12
 
 performance:
-  threads: 10
-  delay: 0.2
-  timeout: 15
+  threads: 5
+  delay: 0.1
+  timeout: 10
 
 browser:
-  enabled: true
+  enabled: false
   headless: true
+  navigation_timeout: 15
+  settle_time: 0.5
 
 reporting:
   html: true

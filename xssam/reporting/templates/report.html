@@ -6,71 +6,99 @@
     <title>XSSAM | Security Assessment Report</title>
     <style>
         :root {
-            --primary: #2563eb;
-            --success: #22c55e;
-            --warning: #f59e0b;
-            --danger: #ef4444;
-            --bg: #f8fafc;
-            --card: #ffffff;
-            --text-main: #1e293b;
-            --text-muted: #64748b;
-            --code-bg: #1e293b;
-            --code-text: #f8fafc;
+            --primary: #2563eb; --success: #16a34a; --warning: #d97706;
+            --danger: #dc2626; --bg: #f8fafc; --card: #fff;
+            --text: #1e293b; --muted: #64748b; --border: #e2e8f0;
+            --code-bg: #0f172a; --code-text: #f8fafc;
         }
-        body { font-family: 'Inter', system-ui, -apple-system, sans-serif; background-color: var(--bg); color: var(--text-main); margin: 0; padding: 0; line-height: 1.5; }
-        .header { background: var(--code-bg); color: white; padding: 40px 20px; text-align: center; }
-        .header h1 { margin: 0; font-size: 32px; letter-spacing: -1px; }
-        .header p { opacity: 0.8; margin-top: 10px; }
-        .container { max-width: 1100px; margin: -30px auto 50px; padding: 0 20px; }
-        .summary-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 20px; margin-bottom: 40px; }
-        .stat-card { background: var(--card); padding: 20px; border-radius: 12px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1); text-align: center; border: 1px solid #e2e8f0; }
-        .stat-value { font-size: 36px; font-weight: 800; color: var(--primary); display: block; }
-        .stat-label { font-size: 14px; color: var(--text-muted); text-transform: uppercase; font-weight: 600; }
-        .finding-card { background: var(--card); border-radius: 12px; border: 1px solid #e2e8f0; margin-bottom: 24px; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
-        .finding-status { padding: 12px 20px; color: white; font-weight: 700; display: flex; justify-content: space-between; align-items: center; }
-        .status-CONFIRMED { background: var(--success); }
-        .status-POTENTIAL { background: var(--warning); }
-        .status-REFLECTED { background: var(--primary); }
-        .finding-body { padding: 20px; }
-        .finding-row { display: grid; grid-template-columns: 120px 1fr; gap: 10px; margin-bottom: 10px; }
-        .label { color: var(--text-muted); font-weight: 600; font-size: 14px; }
-        .value { font-family: 'JetBrains Mono', 'Fira Code', monospace; word-break: break-all; }
-        .code-block { background: var(--code-bg); color: var(--code-text); padding: 15px; border-radius: 8px; font-family: monospace; margin: 15px 0; overflow-x: auto; white-space: pre-wrap; }
-        .severity-badge { padding: 4px 12px; border-radius: 999px; font-size: 12px; font-weight: 700; color: white; }
-        .sev-High { background: var(--danger); }
-        .sev-Medium { background: var(--warning); }
-        .sev-Low { background: var(--primary); }
+        * { box-sizing: border-box; }
+        body { font-family: system-ui, -apple-system, "Segoe UI", sans-serif; background: var(--bg); color: var(--text); margin: 0; line-height: 1.5; }
+        .header { background: var(--code-bg); color: #fff; padding: 36px 20px 56px; text-align: center; }
+        .header h1 { margin: 0; font-size: 30px; }
+        .header p { color: #cbd5e1; margin: 8px 0 0; }
+        .container { max-width: 1100px; margin: -32px auto 50px; padding: 0 20px; }
+        .summary-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 16px; margin-bottom: 28px; }
+        .stat-card { background: var(--card); padding: 18px; border-radius: 12px; border: 1px solid var(--border); box-shadow: 0 3px 10px rgba(15,23,42,.06); text-align: center; }
+        .stat-value { display: block; font-size: 32px; font-weight: 800; color: var(--primary); }
+        .stat-label { color: var(--muted); font-size: 13px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; }
+        .metadata { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 14px 18px; margin-bottom: 24px; color: var(--muted); }
+        .finding-card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; margin-bottom: 20px; overflow: hidden; box-shadow: 0 2px 8px rgba(15,23,42,.05); }
+        .finding-status { padding: 11px 18px; color: #fff; font-weight: 800; display: flex; justify-content: space-between; align-items: center; }
+        .status-confirmed { background: var(--success); }
+        .status-potential, .status-reflected { background: var(--warning); }
+        .status-not_vulnerable { background: var(--muted); }
+        .finding-body { padding: 18px; }
+        .finding-row { display: grid; grid-template-columns: 145px 1fr; gap: 10px; margin-bottom: 8px; }
+        .label { color: var(--muted); font-weight: 700; }
+        .value, .code-block { font-family: ui-monospace, "SFMono-Regular", Consolas, monospace; word-break: break-all; }
+        .code-block { background: var(--code-bg); color: var(--code-text); padding: 12px; border-radius: 8px; margin: 6px 0 14px; white-space: pre-wrap; overflow-wrap: anywhere; }
+        .soft-code { background: #f1f5f9; color: var(--text); border: 1px solid var(--border); }
+        .severity-badge { padding: 4px 10px; border-radius: 999px; font-size: 12px; background: rgba(255,255,255,.22); }
+        .empty { background: var(--card); border: 1px dashed var(--border); border-radius: 12px; padding: 36px; text-align: center; color: var(--muted); }
+        .footer { color: var(--muted); font-size: 13px; margin-top: 28px; text-align: center; }
+        @media (max-width: 600px) { .finding-row { grid-template-columns: 1fr; gap: 2px; } }
     </style>
 </head>
 <body>
     <div class="header">
         <h1>XSSAM | Security Report</h1>
-        <p>Automated XSS Reconnaissance & Validation Results</p>
+        <p>Automated XSS reconnaissance and validation results</p>
     </div>
     <div class="container">
         <div class="summary-grid">
-            <div class="stat-card"><span class="stat-value">{{total_findings}}</span><span class="stat-label">Total Findings</span></div>
-            <div class="stat-card"><span class="stat-value" style="color: var(--success)">{{confirmed}}</span><span class="stat-label">Confirmed XSS</span></div>
-            <div class="stat-card"><span class="stat-value" style="color: var(--warning)">{{potential}}</span><span class="stat-label">Potential</span></div>
+            <div class="stat-card"><span class="stat-value">{{ total_findings }}</span><span class="stat-label">Findings</span></div>
+            <div class="stat-card"><span class="stat-value" style="color: var(--success)">{{ confirmed }}</span><span class="stat-label">Confirmed</span></div>
+            <div class="stat-card"><span class="stat-value" style="color: var(--warning)">{{ potential }}</span><span class="stat-label">Potential</span></div>
+            <div class="stat-card"><span class="stat-value">{{ scanned_url_count }}</span><span class="stat-label">URLs visited</span></div>
         </div>
-        <div id="findings">
+        <div class="metadata">
+            <strong>Target:</strong> {{ target_url }} &nbsp;·&nbsp;
+            <strong>Generated:</strong> {{ generated_at }}
+        </div>
+
+        {% if findings %}
             {% for finding in findings %}
-            <div class="finding-card">
-                <div class="finding-status status-{{finding.status}}">
-                    <span>{{finding.status}}</span>
-                    <span class="severity-badge sev-{{finding.severity}}">{{finding.severity}}</span>
+            <article class="finding-card">
+                <div class="finding-status status-{{ finding.status_class }}">
+                    <span>{{ finding.status }}</span>
+                    <span class="severity-badge">{{ finding.severity }} / {{ finding.confidence }} confidence</span>
                 </div>
                 <div class="finding-body">
-                    <div class="finding-row"><div class="label">Parameter</div><div class="value">{{finding.parameter.name}}</div></div>
-                    <div class="finding-row"><div class="label">Context</div><div class="value">{{finding.context}}</div></div>
+                    <div class="finding-row"><div class="label">Finding ID</div><div class="value">{{ finding.finding_id }}</div></div>
+                    <div class="finding-row"><div class="label">Target URL</div><div class="value">{{ finding.target_url }}</div></div>
+                    <div class="finding-row"><div class="label">Parameter</div><div class="value">{{ finding.parameter.name }} ({{ finding.parameter.location }})</div></div>
+                    <div class="finding-row"><div class="label">Context</div><div class="value">{{ finding.context }}</div></div>
+
                     <div class="label">Proof URL</div>
-                    <div class="code-block">{{finding.proof_url}}</div>
+                    <div class="code-block">{{ finding.proof_url or 'n/a' }}</div>
+
                     <div class="label">Payload</div>
-                    <div class="code-block" style="background: #f1f5f9; color: #1e293b; border: 1px solid #cbd5e1;">{{finding.payload.text}}</div>
+                    <div class="code-block soft-code">{{ finding.payload.text }}</div>
+
+                    {% if finding.rendered_payload and finding.rendered_payload != finding.payload.text %}
+                    <div class="label">Rendered variant</div>
+                    <div class="code-block soft-code">{{ finding.rendered_payload }}</div>
+                    {% endif %}
+
+                    {% if finding.poc %}
+                    <div class="finding-row"><div class="label">POC method</div><div class="value">{{ finding.poc.method }}</div></div>
+                    {% if finding.poc.data %}
+                    <div class="label">POC body</div>
+                    <div class="code-block soft-code">{% for key, value in finding.poc.data.items() %}{{ key }}={{ value }}
+{% endfor %}</div>
+                    {% endif %}
+                    {% endif %}
+
+                    {% if finding.evidence.screenshot %}
+                    <div class="finding-row"><div class="label">Screenshot</div><div class="value">{{ finding.evidence.screenshot }}</div></div>
+                    {% endif %}
                 </div>
-            </div>
+            </article>
             {% endfor %}
-        </div>
+        {% else %}
+            <div class="empty">No potential or confirmed findings were recorded for this scan.</div>
+        {% endif %}
+        <p class="footer">Only test systems you are explicitly authorized to assess. POTENTIAL findings require manual verification.</p>
     </div>
 </body>
 </html>
