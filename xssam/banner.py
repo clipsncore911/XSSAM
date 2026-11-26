@@ -1,9 +1,11 @@
+
 from rich.console import Console
 from rich.panel import Panel
 from rich.text import Text
 
-def print_banner():
-    console = Console()
+
+def print_banner(console: Console | None = None) -> None:
+    console = console or Console()
     banner_text = Text()
 
     ascii_art = r"""
@@ -11,11 +13,13 @@ def print_banner():
 ╚██╗██╔╝██╔════╝██╔════╝██╔══██╗████╗ ████║
  ╚███╔╝ ███████╗███████╗███████║██╔████╔██║
  ██╔██╗ ╚════██║╚════██║██╔══██║██║╚██╔╝██║
-██╔╝ ██╗███████║███████║██║  ██║██║ ╚═╝ ██║
+██╔╝ ██╗███████║███████╗██║  ██║██║ ╚═╝ ██║
 ╚═╝  ╚═╝╚══════╝╚══════╝╚═╝  ╚═╝╚═╝     ╚═╝
     """
 
     banner_text.append(ascii_art, style="bold cyan")
-    banner_text.append("\n                     XSSAM\n                  made by SAUMYA\n", style="bold white")
-
+    banner_text.append(
+        "\n                     XSSAM\n                  made by SAUMYA\n",
+        style="bold white",
+    )
     console.print(Panel(banner_text, border_style="cyan", expand=False))

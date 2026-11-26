@@ -10,4 +10,8 @@ env/
 .coverage
 htmlcov/
 output/
+demo-output/
+*.egg-info/
+build/
+dist/
 .claude/

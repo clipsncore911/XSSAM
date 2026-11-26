@@ -1,8 +1,8 @@
 import re
 from urllib.parse import urljoin
-from typing import Set, List
-import httpx
+
 from bs4 import BeautifulSoup
+
 
 class JSDiscoveryEngine:
     def __init__(self, client):
@@ -11,7 +11,7 @@ class JSDiscoveryEngine:
         self.url_pattern = re.compile(r'["\'](https?://[^\s"\']+)["\']')
         self.path_pattern = re.compile(r'["\'](/[a-zA-Z0-9._/-]+)["\']')
 
-    async def extract_endpoints(self, js_url: str) -> Set[str]:
+    async def extract_endpoints(self, js_url: str) -> set[str]:
         endpoints = set()
         response = await self.client.request("GET", js_url)
         if not response:
@@ -33,7 +33,7 @@ class JSDiscoveryEngine:
 
         return endpoints
 
-    def parse_html_for_js(self, html: str, base_url: str) -> List[str]:
+    def parse_html_for_js(self, html: str, base_url: str) -> list[str]:
         soup = BeautifulSoup(html, "html.parser")
         js_files = []
         for script in soup.find_all("script", src=True):
